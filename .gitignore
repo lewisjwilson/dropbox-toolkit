@@ -1,5 +1,4 @@
 .DS_Store
-node_modules
 /dist
 
 # local env files
@@ -20,3 +19,6 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# API TOKENS
+src/config/config.js
