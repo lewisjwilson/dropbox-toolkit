@@ -18,17 +18,8 @@
             :class="['pa-2', index % 2 == 0 ? 'bg-grey-lighten-2' : '']"
             >
             <span v-if="item.tag === 'folder'"><v-icon>mdi-folder</v-icon> {{ item.name }}</span>
-            
             <span v-else>{{ item.name }}</span>
           </div>
-        </template>
-        <template v-slot:load-more="{ props }">
-          <v-btn
-            icon="mdi-refresh"
-            size="small"
-            variant="text"
-            v-bind="props"
-          ></v-btn>
         </template>
       </v-infinite-scroll>
     </v-main>
