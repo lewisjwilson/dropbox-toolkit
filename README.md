@@ -4,8 +4,7 @@ A tool to automatically generate english subtitles via the dropbox api and opena
 
 ### Prerequisites
 
-- node 20.14.0 (npm)
-- vue/cli 5.0.8
+- docker
 
 ### Setup
 
@@ -23,6 +22,6 @@ export const DROPBOX_ACCESS_TOKEN = 'YOUR_ACCESS_TOKEN';
 
 #### Starting the App
 - Navigate to the root folder of this project in a terminal
-- Run the command `npm run dev`
+- Run the command `docker-compose up`
   
 The application will be accessible at [http://localhost:3000](http://localhost:3000)
