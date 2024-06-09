@@ -29,7 +29,8 @@
 </template>
 
 <script>
-import { DROPBOX_ACCESS_TOKEN } from '@/config/config';
+import 'isomorphic-fetch'; 
+import { Dropbox } from 'dropbox';
 
 export default {
   data: () => ({
@@ -44,9 +45,7 @@ export default {
       }, 1000);
     },
     async loadDropbox() {
-      const fetch = await import('isomorphic-fetch');
-      const { Dropbox } = await import('dropbox');
-      const dbx = new Dropbox({ accessToken: DROPBOX_ACCESS_TOKEN });
+      const dbx = new Dropbox({ accessToken: process.env.DROPBOX_ACCESS_TOKEN });
       try {
         const response = await dbx.filesListFolder({ path: '' });
         console.log(response);
