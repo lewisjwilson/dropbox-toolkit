@@ -14,7 +14,7 @@ A tool to automatically generate english subtitles via the dropbox api and opena
 - Generate an access token
 
 #### Setting Access Tokens within the app (first time only)
-- Create the file `src/config/config.js`
+- Create the file `.env.local` in the project root directory
 - ↓ Paste the following inside the file ↓
 ```javascript
 export const DROPBOX_ACCESS_TOKEN = 'YOUR_ACCESS_TOKEN';
