@@ -4,17 +4,11 @@ A tool to automatically generate english subtitles via the dropbox api and opena
 
 ### Prerequisites
 
-- docker
-
-### Setup
-
-#### Dropbox (first time only)
-- Create a new app in dropbox and allow it full access to your files.
-- Make sure file read and write permissions are set
-- Generate an access token
+- Docker
+- Dropbox API key (file read & write persmissions enabled)
 
 #### Setting Access Tokens within the app (first time only)
-- Create the file `src/config/config.js`
+- Create the file `.env.local` in the project root directory
 - ↓ Paste the following inside the file ↓
 ```javascript
 export const DROPBOX_ACCESS_TOKEN = 'YOUR_ACCESS_TOKEN';
