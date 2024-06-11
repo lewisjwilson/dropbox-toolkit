@@ -10,6 +10,7 @@ A tool to perform tasks otherwise not-avaliable via the current dropbox UI
 - Docker
 - Node v20.14.0
 - Dropbox App - created via App Console (file read & write permissions enabled)
+- cURL (for Dropbox refresh token)
 
 #### Setting Access Tokens within the app (first time only)
 - Create the file `.env.local` in the project root directory
