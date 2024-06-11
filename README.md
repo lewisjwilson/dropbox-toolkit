@@ -8,6 +8,7 @@ A tool to perform tasks otherwise not-avaliable via the current dropbox UI
 
 ### Prerequisites
 - Docker
+- Node v20.14.0
 - Dropbox App - created via App Console (file read & write permissions enabled)
 
 #### Setting Access Tokens within the app (first time only)
@@ -23,6 +24,7 @@ VITE_DROPBOX_APP_SECRET=<YOUR_APP_SECRET>
 #### Starting the App
 - Navigate to the root folder of this project in a terminal
 - Run the command `docker-compose up`
+- Run the command `npm i`
 - Run the command `npm run dev`
   
 The application will be accessible at [http://localhost:3000](http://localhost:3000)
