@@ -13,7 +13,7 @@ A tool to perform tasks otherwise not-avaliable via the current dropbox UI
 #### Setting Access Tokens within the app (first time only)
 - Create the file `.env.local` in the project root directory
 - ↓ Paste the following inside the file ↓
-```javascript
+```
 VITE_DROPBOX_REFRESH_TOKEN=<YOUR_REFRESH_TOKEN>
 VITE_DROPBOX_APP_KEY=<YOUR_APP_KEY>
 VITE_DROPBOX_APP_SECRET=<YOUR_APP_SECRET>
