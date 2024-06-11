@@ -1,11 +1,14 @@
-# DropSubs [incomplete]
+# Dropbox Toolkit
 
-A tool to automatically generate english subtitles via the dropbox api and openai's "whisper"
+A tool to perform tasks otherwise not-avaliable via the current dropbox UI
+
+### Current features
+- Batch rename all files with a captured date (usu. video files).
+  - Chronological rename (1.mp4, 2.mp4... etc)
 
 ### Prerequisites
-
 - Docker
-- Dropbox App - created via App Console (file read & write persmissions enabled)
+- Dropbox App - created via App Console (file read & write permissions enabled)
 
 #### Setting Access Tokens within the app (first time only)
 - Create the file `.env.local` in the project root directory
@@ -20,5 +23,6 @@ VITE_DROPBOX_APP_SECRET=<YOUR_APP_SECRET>
 #### Starting the App
 - Navigate to the root folder of this project in a terminal
 - Run the command `docker-compose up`
+- Run the command `npm run dev`
   
 The application will be accessible at [http://localhost:3000](http://localhost:3000)
