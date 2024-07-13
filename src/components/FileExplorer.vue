@@ -12,7 +12,15 @@
     @click="confirmRenameByCaptureDate">
     Rename By Capture Date
   </v-btn>
+  <div v-if="renameInProgress" class="progress-container">
+    <v-progress-circular 
+      indeterminate 
+      :size="57" 
+      :width="7"
+      />
+  </div>
   <v-infinite-scroll
+    v-else
     height="600"
     @load="loadMore"
   >
@@ -40,7 +48,8 @@ export default {
     totalNumberOfItems: 0,
     accessToken: '',
     currentDirectory: '',
-    timestampsLoaded: false
+    timestampsLoaded: false,
+    renameInProgress: false
   }),
 
   methods: {
@@ -151,19 +160,40 @@ export default {
     },
 
     async renameByCaptureDate() {
+      this.renameInProgress = true
       this.items.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
       const dbx = new Dropbox({ accessToken: this.accessToken });
       const batchEntries = [];
+      const pathMappings = []; // Track original and new paths
+      let reportFilePath = "";
+      
       this.items.forEach((item, index) => {
         if (item.tag !== 'folder') {
-          const path = item.path.split('/');
-          const fileNameWithExtension = path.pop();
-          const extension = fileNameWithExtension.split('.')[1];
-          const newPath = `${item.path.substring(0, item.path.lastIndexOf('/') + 1)}${index + 1}.${extension}`;
+          const pathParts = item.path.split('/');
+          const fileNameWithExtension = pathParts.pop();
+          const fileNameParts = fileNameWithExtension.split('.');
+          const extension = fileNameParts.length > 1 ? fileNameParts.pop() : ''; // Get extension safely
+          if (extension === 'txt'){ // skip txt files
+            return
+          }
+
+          // Set reportFilePath if it's not already set
+          if (reportFilePath.length === 0) {
+            const directoryPath = pathParts.join('/');
+            reportFilePath = directoryPath;
+          }
+
+          // Construct the new path
+          const newPath = `${pathParts.join('/')}/${index + 1}${extension ? '.' + extension : ''}`;
 
           batchEntries.push({
             from_path: item.path,
             to_path: newPath,
+          });
+
+          pathMappings.push({
+            originalPath: item.path,
+            newPath: newPath
           });
 
           // Update local item immediately to reflect the new path
@@ -174,8 +204,50 @@ export default {
 
       try {
         const response = await dbx.filesMoveBatchV2({ entries: batchEntries });
+        const asyncJobId = response.result.async_job_id;
+    
+        let jobStatus;
+        do {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            jobStatus = await dbx.filesMoveBatchCheckV2({ async_job_id: asyncJobId });
+        } while (jobStatus.result['.tag'] === 'in_progress');
+        
+        if (jobStatus.result['.tag'] === 'complete') {
+            console.log('All files have been renamed successfully')
+            window.alert('All files have been renamed successfully')
+        } else {
+            console.error('Some files failed to be renamed:', jobStatus.result)
+            window.alert('Some files failed to be renamed:', JSON.stringify(jobStatus.result))
+        }
       } catch (error) {
-        console.error('Error renaming files:', error);
+        console.error('Error renaming files:', error)
+        window.alert('Error renaming files:' + error)
+      } finally {
+        // Create the content of the .txt file
+        let fileContent = 'Original Path -> New Path\n';
+        pathMappings.forEach(mapping => {
+          fileContent += `${mapping.originalPath} -> ${mapping.newPath}\n`;
+        });
+
+        // Generate timestamp for the report filename
+        const timestamp = new Date().toISOString().replace(/[-T:]/g, '').slice(0, -5); // Format: YYYYMMDDHHmmss
+
+        // Create a Blob from the file content
+        const blob = new Blob([fileContent], { type: 'text/plain' });
+        const fileName = `file_rename_report_${timestamp}.txt`;
+
+        // Upload the .txt file to Dropbox
+        try {
+          const uploadResponse = await dbx.filesUpload({
+            path: `${reportFilePath}/${fileName}`,
+            contents: blob,
+            mode: 'overwrite',
+          });
+          console.log('Report file uploaded successfully:', uploadResponse)
+        } catch (uploadError) {
+          console.error('Error uploading report file:', uploadError)
+        }
+        this.renameInProgress = false
       }
     }
   },
@@ -189,5 +261,10 @@ export default {
 <style>
 .spacer {
   margin-left: 10px;
+}
+.progress-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 </style>
