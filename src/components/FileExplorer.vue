@@ -12,6 +12,19 @@
     @click="confirmRenameByCaptureDate">
     Rename By Capture Date
   </v-btn>
+  <draggable
+    v-model="items"
+    :item-key="'id'"
+    :move="checkMove"
+    @start="dragging = true"
+    @end="dragEnd"
+  >
+    <template #item="{ element }">
+      <div class="list-group-item">
+        {{ element.name }}
+      </div>
+    </template>
+  </draggable>
   <div v-if="renameInProgress" class="progress-container">
     <v-progress-circular 
       indeterminate 
@@ -41,8 +54,12 @@
 <script>
 import 'isomorphic-fetch'; 
 import { Dropbox } from 'dropbox';
+import draggable from 'vuedraggable';
 
 export default {
+  components: {
+    draggable,
+  },
   data: () => ({
     items: [],
     totalNumberOfItems: 0,
@@ -103,7 +120,9 @@ export default {
               const dbx = new Dropbox({ accessToken: this.accessToken });
 
               const response = await dbx.filesListFolder({ path: '' });
-              this.items = response.result.entries.map(entry => ({
+              this.items = response.result.entries.map((entry, index) => ({
+                  id: entry.id,
+                  idx: index,
                   tag: entry['.tag'],
                   path: entry.path_display,
                   name: entry.name,
@@ -124,7 +143,9 @@ export default {
             this.currentDirectory = item.path
             const dbx = new Dropbox({ accessToken: this.accessToken });
             const response = await dbx.filesListFolder({ path: item.path });
-            this.items = response.result.entries.map(entry => ({
+            this.items = response.result.entries.map((entry, index) => ({
+                id: entry.id,
+                idx: index,
                 tag: entry['.tag'],
                 path: entry.path_display,
                 name: entry.name,
@@ -249,12 +270,45 @@ export default {
         }
         this.renameInProgress = false
       }
+    },
+
+    checkMove(evt) {
+      const item = evt.draggedContext.element
+      if(item.tag !== 'file') return false // only move file items
+      return true;
+    },
+
+    dragEnd(evt) {
+      this.dragging = false
+
+      console.log(`items before index change:`)
+      console.log(this.items)
+
+      const old_idx = evt.oldIndex
+      const new_idx = evt.newIndex
+      const moved_item = this.items[new_idx]
+
+      console.log('Item being moved:', moved_item);
+      console.log('From index:', old_idx);
+      console.log('To index:', new_idx);
+
+      this.sortIndexes()
+
+      console.log(`items after index change:`)
+      console.log(this.items)
+    },
+
+    sortIndexes() {
+      this.items = this.items.map((item, index) => ({
+        ...item,           // Keep all existing properties of the item
+        idx: index         // Set the current position as the index
+      }));
     }
   },
 
   created() {
     this.loadDropbox();
-  }
+  },
 }
 </script>
 
@@ -266,5 +320,9 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+.ghost {
+  opacity: 0.5;
+  background: #c8ebfb;
 }
 </style>
