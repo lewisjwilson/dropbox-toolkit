@@ -23,7 +23,16 @@
     @click="confirmRename">
     Save Changes
   </v-btn>
-  <draggable
+  <div v-if="loading">
+    <v-progress-circular
+          indeterminate
+          color="primary"
+          size="24"
+          class="mr-2"
+    />
+    Please wait... This may take a while.
+  </div>
+  <draggable v-else
     v-model="items"
     :item-key="'id'"
     :move="checkMove"
@@ -34,9 +43,9 @@
         :class="['draggable-list-item', element.idx % 2 == 0 ? 'bg-grey-lighten-2' : '']"
         @click="selectItem(element)"
         >
-
+        <img v-if="element.thumbnail" :src="`data:image/jpeg;base64,${element.thumbnail}`"  style="width: 100px; height: auto;"/>
         <span v-if="element.tag === 'folder'"><v-icon>mdi-folder</v-icon> {{ element.name }}</span>
-        <span v-else> {{ element.name }} 
+        <span v-else class="align-items: center"> {{ element.name }} 
           <span class='sub-element'> -> {{ index }}.{{ element.name.includes('.') ? element.name.split('.').pop() : '' }}</span>
         </span>
       </div>
@@ -57,15 +66,18 @@ export default {
     savedItemsState: [],
     items: [],
     totalNumberOfItems: 0,
+    dbx: null,
     accessToken: '',
     currentDirectory: '',
     timestampsLoaded: false,
     renameInProgress: false,
-    draggableEnabled: false
+    draggableEnabled: false,
+    loading: true
   }),
 
   methods: {
     async loadDropbox() {
+        this.loading = true
         this.currentDirectory = '/'
         this.timestampsLoaded = false
         const refreshToken = import.meta.env.VITE_DROPBOX_REFRESH_TOKEN;
@@ -97,9 +109,9 @@ export default {
 
             if (tokenResponse.ok) {
               this.accessToken = tokenData.access_token;
-              const dbx = new Dropbox({ accessToken: this.accessToken });
+              this.dbx = new Dropbox({ accessToken: this.accessToken });
 
-              const response = await dbx.filesListFolder({ path: '' });
+              const response = await this.dbx.filesListFolder({ path: '' });
               this.items = response.result.entries.map((entry, index) => ({
                   id: entry.id,
                   idx: index,
@@ -109,7 +121,8 @@ export default {
               }))
               this.totalNumberOfItems = this.items.length
               this.savedItemsState = this.items
-              this.getFileMetadata()
+              await this.getFileMetadata()
+              this.loading = false
             } else {
             console.error('Error refreshing Dropbox token:', tokenData);
             }
@@ -119,11 +132,11 @@ export default {
     },
     async selectItem(item) {
         if (item.tag === 'folder') {
+            this.loading = true
             console.log('Moving to:', item.path);
             this.timestampsLoaded = false
             this.currentDirectory = item.path
-            const dbx = new Dropbox({ accessToken: this.accessToken });
-            const response = await dbx.filesListFolder({ path: item.path });
+            const response = await this.dbx.filesListFolder({ path: item.path });
             this.items = response.result.entries.map((entry, index) => ({
                 id: entry.id,
                 idx: index,
@@ -132,18 +145,16 @@ export default {
                 name: entry.name,
             }));
             this.totalNumberOfItems = this.items.length
-            this.getFileMetadata()
+            await this.getFileMetadata()
             this.savedItemsState = this.items
-            
-            console.log(this.items)
+            this.loading = false
         }
     },
     
     async getFileMetadata() {
-      const dbx = new Dropbox({ accessToken: this.accessToken });
       const metadataPromises = this.items.map(async item => {
         if (item.tag !== 'folder') {
-          const response = await dbx.filesGetMetadata({ path: item.path, include_media_info: true });
+          const response = await this.dbx.filesGetMetadata({ path: item.path, include_media_info: true });
           if (response.result.media_info && response.result.media_info.metadata) {
             item.createdAt = response.result.media_info.metadata.time_taken
           }
@@ -156,10 +167,48 @@ export default {
       .catch(error => {
         console.error('Error fetching metadata:', error);
       });
+
+      // Step 1: Filter and prepare thumbnail entries
+      const thumbnailEntries = this.items
+        .filter(item => item.tag !== 'folder' && !item.path.endsWith('.txt'))
+        .map(item => ({
+          path: item.path,
+          format: 'jpeg', // Define the format of the thumbnail
+          quality: 'quality_80',
+          size: 'w128h128', // Define the size (e.g., 128x128)
+        }));
+
+      const thumbnailResponseEntries = await this.fetchThumbnailsInChunks(thumbnailEntries);
+
+      // Step 4: Process the response
+      thumbnailResponseEntries.forEach((entry, index) => {
+        if (entry['.tag'] === 'success') {
+          const item = this.items.find(i => i.path === thumbnailEntries[index].path);
+          if (item) {
+            item.thumbnail = entry.thumbnail; // Set base64 thumbnail data to item
+          }
+        } else {
+          console.error(`Failed to retrieve thumbnail for ${thumbnailEntries[index].path}: ${entry['.tag']}`);
+        }
+      });
+
     },
 
-    async createThumbnailFromBlob(blob) {
-      return URL.createObjectURL(blob)
+    async fetchThumbnailsInChunks(entries, maxBatchSize = 25) {
+      const results = [];
+      
+      for (let i = 0; i < entries.length; i += maxBatchSize) {
+        const chunk = entries.slice(i, i + maxBatchSize);
+        
+        try {
+          const response = await this.dbx.filesGetThumbnailBatch({ entries: chunk });
+          results.push(...response.result.entries);
+        } catch (error) {
+          console.error('Error fetching thumbnails:', error);
+        }
+      }
+      
+      return results;
     },
 
     confirmOrderByCaptureDate() {
@@ -174,10 +223,9 @@ export default {
     },
 
     async createHistoryFile() {
-      const dbx = new Dropbox({ accessToken: this.accessToken });
       let fileContent = 'Original Path, New Path\n'
       const directoryPath = this.items[0].path.split('/').slice(0, -1).join('/')
-      let newIndex = 0
+      let newIndex = 1
       this.items.forEach(newItem => {
         const extension = newItem.path.split('/').pop().split('.').pop()
         if (extension === 'txt' || newItem.tag === 'folder') return
@@ -187,17 +235,14 @@ export default {
         newIndex++
       })
 
-      // Generate timestamp for the report filename
-      const timestamp = new Date().toISOString().replace(/[-T:]/g, '').slice(0, -5); // Format: YYYYMMDDHHmmss
-
       // Create a Blob from the file content
       const blob = new Blob([fileContent], { type: 'text/plain' });
-      const fileName = `filehistory_${timestamp}.txt`;
+      const fileName = `.filehistory.txt`;
 
       // Upload the .txt file to Dropbox
       try {
-        await dbx.filesUpload({
-          path: `${directoryPath}/.${fileName}`,
+        await this.dbx.filesUpload({
+          path: `${directoryPath}/${fileName}`,
           contents: blob,
           mode: 'overwrite',
         })
@@ -208,8 +253,7 @@ export default {
     },
 
     async renameFiles() {
-      const dbx = new Dropbox({ accessToken: this.accessToken });
-      
+      this.loading = true
       const batchEntries = this.items
         .filter(item => item.tag !== 'folder' && !item.path.endsWith('.txt')) // Filter out folders and skip .txt files
         .map(item => {
@@ -231,7 +275,7 @@ export default {
       // Define `temp` folder path
       const tempFolderPath = `${batchEntries[0].to_path.split('/').slice(0, -1).join('/')}`;
       try {
-        await dbx.filesCreateFolderV2({ path: tempFolderPath });
+        await this.dbx.filesCreateFolderV2({ path: tempFolderPath });
         console.log(`Created folder: ${tempFolderPath}`);
       } catch (error) {
         if (error.status !== 409) { // Ignore 'already exists' error
@@ -242,14 +286,14 @@ export default {
 
       // Send batch copy request
       try {
-        const batchResponse = await dbx.filesCopyBatchV2({
+        const batchResponse = await this.dbx.filesCopyBatchV2({
           entries: batchEntries
         });
 
         // Poll for the result until it's complete
         let asyncJobStatus;
         do {
-          asyncJobStatus = await dbx.filesCopyBatchCheckV2({ async_job_id: batchResponse.result.async_job_id });
+          asyncJobStatus = await this.dbx.filesCopyBatchCheckV2({ async_job_id: batchResponse.result.async_job_id });
           await new Promise(resolve => setTimeout(resolve, 1000)); // Poll every second
         } while (asyncJobStatus.result['.tag'] === 'in_progress');
 
@@ -258,12 +302,9 @@ export default {
           const failedEntries = batchEntries.filter((_, idx) => asyncJobStatus.result.entries[idx]['.tag'] === 'failure');          
 
           if (failedEntries.length > 0) {
-            console.error('Some files failed to be copied:', failedEntries);
-            window.alert('Some files failed to be copied. Reverting changes.');
-            
+            console.error('Some files failed to be copied:', failedEntries);            
           } else {
             console.log('All files have been copied to /temp successfully');
-            window.alert('All files have been copied to /temp successfully');
             await this.moveFilesFromTemp(batchEntries, tempFolderPath)
           }
         } else {
@@ -273,26 +314,26 @@ export default {
       } catch (error) {
         console.error('Error during batch copy:', error);
         window.alert('Error during batch copy: ' + error.message);
+      } finally {
+        this.loading = false
       }
     },
 
     async moveFilesFromTemp(batchEntries, tempFolderPath) {
-      const dbx = new Dropbox({ accessToken: this.accessToken });
       const deleteEntries = batchEntries.map(entry => ({ path: entry.from_path }));
 
       // Perform the batch delete
-      const deleteResponse = await dbx.filesDeleteBatch({ entries: deleteEntries });
+      const deleteResponse = await this.dbx.filesDeleteBatch({ entries: deleteEntries });
 
       // Poll until batch delete is complete
       let deleteJobStatus;
       do {
-        deleteJobStatus = await dbx.filesDeleteBatchCheck({ async_job_id: deleteResponse.result.async_job_id });
+        deleteJobStatus = await this.dbx.filesDeleteBatchCheck({ async_job_id: deleteResponse.result.async_job_id });
         await new Promise(resolve => setTimeout(resolve, 1000)); // Poll every second
       } while (deleteJobStatus.result['.tag'] === 'in_progress');
 
       if (deleteJobStatus.result['.tag'] === 'complete') {
         console.log('All original files have been deleted successfully.');
-        window.alert('Files have been copied and original files deleted.');
       } else {
         console.error('Batch delete operation failed.');
         window.alert('Batch delete operation failed.');
@@ -311,19 +352,19 @@ export default {
       });
 
       // Perform the batch move from `temp` to the parent folder
-      const moveResponse = await dbx.filesMoveBatchV2({ entries: moveBackEntries });
+      const moveResponse = await this.dbx.filesMoveBatchV2({ entries: moveBackEntries });
 
       // Poll until batch move is complete
       let moveJobStatus;
       do {
-        moveJobStatus = await dbx.filesMoveBatchCheckV2({ async_job_id: moveResponse.result.async_job_id });
+        moveJobStatus = await this.dbx.filesMoveBatchCheckV2({ async_job_id: moveResponse.result.async_job_id });
         await new Promise(resolve => setTimeout(resolve, 1000)); // Poll every second
       } while (moveJobStatus.result['.tag'] === 'in_progress');
 
       if (moveJobStatus.result['.tag'] === 'complete') {
         console.log('All files have been moved back up one level successfully.');
-        window.alert('Files have been successfully moved up one level.');
-        this.deleteTempFolder(tempFolderPath)
+        window.alert('Files have been successfully renamed.');
+        await this.deleteTempFolder(tempFolderPath)
       } else {
         console.error('Batch move operation failed.');
         window.alert('Batch move operation failed.');
@@ -331,9 +372,8 @@ export default {
     },
 
     async deleteTempFolder(path) {
-      const dbx = new Dropbox({ accessToken: this.accessToken });
       try {
-        await dbx.filesDeleteV2({ path: path });
+        await this.dbx.filesDeleteV2({ path: path });
         console.log(`Deleted temp folder and its contents: ${path}`);
       } catch (deleteError) {
         console.error(`Failed to delete temp folder: ${path}`, deleteError);
@@ -401,6 +441,7 @@ export default {
 .draggable-list-item {
   padding: 6px;
   font-size: large;
+;
 }
 .sub-element {
   color: dimgrey;
